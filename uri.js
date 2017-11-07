@@ -69,6 +69,13 @@ $.extend(Uri.prototype, {
         }
 
         return params;
+        // var qstr = location.search.substring(1);
+
+        // var params = qstr.split("&").reduce(function(prev, curr, i, arr) {
+            // var p = curr.split("=");
+            // prev[decodeURIComponent(p[0])] = decodeURIComponent(p[1]);
+              // return prev;
+        // }, {});
     },
 
     _getSearch: function() {
