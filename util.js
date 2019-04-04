@@ -145,6 +145,129 @@ module.exports = {
 
   },
 
+  ensure: function (obj, key, factory) {
+    return obj[key] || (obj[key] = factory());
+  },
+  
+  createPromiseQueue: function (callback, context, getQueueKey, queueMap) {
+    queueMap = queueMap || {};
+
+    if (!getQueueKey) {
+      var randomKey = util.uid();
+      getQueueKey = function () {
+        return randomKey;
+      }
+    }
+
+    return function () {
+      var args = [].slice.call(arguments),
+        key = getQueueKey.apply(context, args),
+        dfd = $.Deferred();
+
+      $.when(queueMap[key]).always(function () {
+        dfd.resolve();
+      });
+
+      return queueMap[key] = dfd.then(function () {
+        return callback.apply(context, args);
+      });
+    };
+  },
+
+  /**
+   * 把小promise组合成一个大promise
+   * 小promise之间串行处理，上游promise的返回数据作为下游promise的入参
+   * @param {*} 不限类型，不限数量
+   * @returns {*|JQueryDeferred<T>}
+   * ``` javascript
+   * var test = composePromises(function (num) {
+   *     return parseInt(num * 5000);
+   * }, function (n) {
+   *     var $dfd = $.Deferred();
+   *     setTimeout(function () {
+   *         n % 2 ? $dfd.resolve(n) : $dfd.reject(n);
+   *     }, n);
+   *     return $dfd;
+   * });
+   *
+   * test(Math.random()).then(function (res) {
+   *     console.log('resolved:', res);
+   * }, function (res) {
+   *     console.log('rejected:', res);
+   * });
+   * ```
+   */
+  composePromises: (function () {
+    var dispatch = function (handlers, index, data) {
+      var handler = handlers[index];
+      var result = $.when($.isFunction(handler) ? handler(data) : handler);
+
+      if (index < handlers.length - 1) {
+        return result.then(function (res) {
+          return dispatch(handlers, ++index, res);
+        });
+      }
+
+      return result;
+    };
+
+    return function () {
+      var args = Array.prototype.slice.call(arguments, 0);
+      return function (data) {
+        return dispatch(args, 0, data);
+      }
+    }
+  })(),
+
+  /**
+   * 分片处理大数据量数组
+   * @param arr                   一个庞大的数组
+   * @param options
+   * @param options.startIndex    起始index
+   * @param options.endIndex      结束index
+   * @param options.chunkSize     分片大小
+   * @param options.chunkStart    分片执行开始
+   * @param options.step          单步执行
+   * @param options.chunkEnd      分片执行结束
+   * @param options.complete      所有任务执行结束
+   * @param options.interval      分片之间的时间间隔
+   */
+  processLargeArrayByChunk: function (arr, options) {
+    var index = options.startIndex || 0,
+      chunkSize = options.chunkSize || 100,
+      chunkStart = options.chunkStart || function () { },
+      step = options.step || function () { },
+      chunkEnd = options.chunkEnd || function () { },
+      complete = options.complete || function () { },
+      interval = options.interval || 20,
+      len = arr.length,
+      endIndex = options.endIndex || len;
+
+    if (!len) {
+      complete();
+    }
+    setTimeout(function run() {
+      var s = index,
+        e = Math.min(index + chunkSize, len, endIndex);
+
+      chunkStart(s, e - 1);
+
+      while (index < e) {
+        step(arr[index], index);
+        index++;
+      }
+
+      chunkEnd(s, e - 1);
+
+      if (index < len) {
+        setTimeout(run, interval);
+      }
+      else {
+        complete();
+      }
+    }, 0);
+  },
+
   mixin: function(...list) {
     if (typeof Object.assign != 'function') {
       Object.assign = function(target) {
