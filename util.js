@@ -268,6 +268,26 @@ module.exports = {
     }, 0);
   },
 
+  /**
+   * 根据字符串、字符串数组创建map
+   * @param {array.<{string}>|string} items
+   * @param {string|regExp} [delimiter] 默认值/\s+/
+   * @param {object} [map]
+   * @returns {{*}}
+   */
+  makeMap: function (items, delimiter, map) {
+    items = items || [];
+    if (typeof items === 'string') {
+      items = items.split(delimiter || /\s+/);
+    }
+    map = map || {};
+
+    for (var i = items.length - 1; i >= 0; i--) {
+      map[items[i]] = true;
+    }
+    return map;
+  },
+
   mixin: function(...list) {
     if (typeof Object.assign != 'function') {
       Object.assign = function(target) {
