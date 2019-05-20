@@ -2,7 +2,12 @@
 
 var Focha = require('../lib/focha');
 
-module.exports = {
+var slice = [].slice;
+var HTTP_REG = /(((http[s]?|ftp):\/\/|www\.)[a-z0-9\.\-]+\.([a-z]{2,4})|((http[s]?|ftp):\/\/)?((2[0-4][\d])|(25[0-5])|([01]?[\d]{1,2}))(\.((2[0-4][\d])|(25[0-5])|([01]?[\d]{1,2}))){3})(:\d+)?(\/?[a-z0-9\$\^\*\+\?\(\)\{\}\.\-_~!@#%&:;/=<>]*)?/gi;
+// 参考 https://developer.mozilla.org/en-US/docs/Glossary/Empty_element
+var emptyTags = util.makeMap('area base br col embed hr img input keygen link meta param source track wbr');
+
+var utils = module.exports = {
   guid: function() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
       var r = Math.random() * 16 | 0,
@@ -363,6 +368,156 @@ module.exports = {
       return item.$dfd.promise();
     }
   })(),
+
+  // 遍历节点下的文本节点
+  walkTextNode: function (node, fn) {
+    if (node.nodeType == 3) {
+      fn(node);
+    }
+    else if (node.nodeType == 1 && !emptyTags[node.tagName.toLowerCase()]) {
+      var cursor = node.firstChild,
+        next;
+
+      while (cursor) {
+        next = cursor.nextSibling;
+        utils.walkTextNode(cursor, fn);
+        cursor = next;
+      }
+    }
+  },
+
+  /**
+   * 扫描文本节点内容
+   * @param {Text} textNode 文本节点
+   * @param {RegExp|string} reg 匹配要处理的内容
+   * @param {function} fn 处理函数
+   * @param {object} [options] 可选配置
+   * @param {object} [options.context] 执行处理函数的上下文
+   */
+  scanner: function (textNode, reg, fn, options) {
+    options = options || {};
+    var content = textNode.nodeValue;
+    var tempNode = document.createElement('div');
+    var context = options.context || null;
+
+    var cursor = 0, con = '';
+    if (reg instanceof RegExp) {
+      reg.lastIndex = 0;
+    }
+
+    content.replace(reg, function (m) {
+      var index = content.indexOf(m, cursor);
+      con += util.encodeHTML(content.substring(cursor, index));
+      con += fn.apply(context, slice.call(arguments, 0));
+      cursor = index + m.length;
+    });
+    con += util.encodeHTML(content.substring(cursor));
+
+    tempNode.innerHTML = con;
+
+    while (tempNode.firstChild) {
+      textNode.parentNode.insertBefore(tempNode.firstChild, textNode);
+    }
+
+    textNode.parentNode.removeChild(textNode);
+    tempNode = null;
+  },
+
+  /**
+   * 遍历字符串，格式化特定字符
+   * @param {string} content
+   * @param {string|RegExp} reg
+   * @param {function} handler
+   * @param {object} [options]
+   * @param {boolean} [options.encodeHTML]
+   * @param {object} [options.context]
+   * @return {*}
+   */
+  walkStringByTextNode: function (content, reg, handler, options) {
+    if (!content) {
+      return '';
+    }
+
+    if (!reg || !handler) {
+      return content;
+    }
+
+    var df = document.createElement('div');
+    var html;
+
+    options = _.extend({ encodeHTML: true }, options);
+    df.innerHTML = options.encodeHTML ? util.encodeHTML(content) : content;
+
+    utils.walkTextNode(df, function (textNode) {
+      utils.ensurescanner(textNode, reg, handler, {
+        context: options.context
+      });
+    });
+
+    html = df.innerHTML;
+    df = null;
+
+    return html;
+  },
+
+  /**
+   * 给文本节点中的链接内容添加链接
+   * @param {string} content
+   * @param {object} [options]
+   * @param {boolean} [options.encodeHTML]
+   */
+  addAnchor: function (content, options) {
+    return utils.walkStringByTextNode(content, HTTP_REG, function (m) {
+      var protocolReg = /^(https?|ftp)/i;
+      var a = document.createElement('a');
+      var con;
+
+      a.setAttribute('rel', 'external');
+      a.setAttribute('href', (protocolReg.test(m) ? '' : 'http://') + m);
+      a.setAttribute('target', '_blank');
+      a.textContent = m;
+
+      con = a.outerHTML;
+      a = null;
+      return con;
+    }, {
+        encodeHTML: options ? options.encodeHTML !== false : true
+      });
+  };
+
+  /**
+   * 给文本节点中符合条件的词语添加高亮
+   * @param {string} content
+   * @param {string} keywords
+   * @param {object} [options]
+   * @param {boolean} [options.encodeHTML]
+   */
+  highlight: function (content, keywords, options) {
+    var arr = [];
+    _.each(keywords.split(/\s+/), function (word) {
+      if (word) {
+        arr.push(word);
+      }
+    });
+
+    if (arr.length) {
+      arr = _.sortBy(arr, function (v) {
+        return -v.length;
+      });
+
+      arr = _.map(arr, function (v) {
+        return util.escapeRegExp(v);
+      });
+
+      return utils.walkStringByTextNode(content, new RegExp(arr.join('|'), 'gi'), function (m) {
+        return '<span class="highlight-keyword">' + util.encodeHTML(m) + '</span>';
+      }, {
+          encodeHTML: options ? options.encodeHTML !== false : true
+        });
+    }
+
+    return content;
+  },
 
   mixin: function(...list) {
     if (typeof Object.assign != 'function') {
