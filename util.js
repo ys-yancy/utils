@@ -288,6 +288,82 @@ module.exports = {
     return map;
   },
 
+  /**
+   * 设置图片路径：确保图片正常加载后再设置图片路径
+   * @param $img
+   * @param src
+   * @return {*|JQueryDeferred<T>}
+   *      失败状态码说明：1=参数错误; 2=网络加载失败; 3=当前设置已过期。
+   */
+  setImgSrc: (function () {
+    var queue = [];
+    var runing = [];
+
+    var setImgSrc = function (item) {
+      var img;
+      var $img = item.$img;
+      var src = item.src;
+      var $dfd = item.$dfd;
+
+      if (src && $img) {
+        $img = $($img);
+        img = new Image();
+        var id = util.uid();
+        $img.data('async-set-img-src-id', id);
+        img.onload = function () {
+          if ($img.data('async-set-img-src-id') == id) {
+            $img.removeAttr('async-set-img-src-id');
+            $img.attr('src', src).addClass('state-loaded');
+            $dfd.resolve({
+              width: img.width,
+              height: img.height
+            });
+            img = null;
+          }
+          else {
+            $dfd.reject(3);
+          }
+        };
+        img.onerror = function () {
+          img = null;
+          $dfd.reject(2);
+        };
+        img.src = src;
+      }
+      else {
+        $dfd.reject(1);
+      }
+
+      return $dfd;
+    };
+
+    var run = function () {
+      if (queue.length && runing.length < 4) {
+        var item = queue.shift();
+        runing.push(item);
+        setImgSrc(item).always(function () {
+          var index = runing.indexOf(item);
+          if (index > -1) {
+            runing.splice(index, 1);
+          }
+          run();
+        });
+      }
+    };
+    return function ($img, src) {
+      var item = {
+        $img: $img,
+        src: src,
+        $dfd: $.Deferred()
+      };
+
+      queue.push(item);
+      run();
+
+      return item.$dfd.promise();
+    }
+  })(),
+
   mixin: function(...list) {
     if (typeof Object.assign != 'function') {
       Object.assign = function(target) {
