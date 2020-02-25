@@ -149,6 +149,12 @@ var utils = module.exports = {
     return false;
 
   },
+  
+  // 是否为回文字符串
+  isPalindrome: function (str) {
+    str = str.replace(/\W/g, '').toLowerCase();
+    return str === (str.split('').reverse().join(''));
+  },
 
   ensure: function (obj, key, factory) {
     return obj[key] || (obj[key] = factory());
