@@ -754,4 +754,30 @@ var utils = module.exports = {
       });
       return a.join("&")
   },
+
+  getLocalSize: function() {
+    return Promise((resolve) => {
+      var test = '0123456789';
+      var add = function(num) {
+          num += num;
+          if(num.length == 10240) {
+            test = num;
+            return;
+          }
+          add(num);
+      }
+      add(test);
+      var sum = test;
+      var show = setInterval(function(){
+        sum += test;
+        try {
+            window.localStorage.removeItem('test');
+            window.localStorage.setItem('test', sum);
+        } catch(e) {
+          resolve(sum.length / 1024);
+          clearInterval(show);
+        }
+      }, 1);
+    });
+  },
 };
