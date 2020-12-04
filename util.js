@@ -780,4 +780,17 @@ var utils = module.exports = {
       }, 1);
     });
   },
+  rect(el) {
+      return el.getBoundingClientRect();
+  },
+
+  check(r0, r1) {
+      return !(r1.top >= r0.bottom - bufferHeight || r1.bottom <= r0.top);
+  },
+
+  checkInView(container = document.body) {
+      if (this.check(this.rect(container), this.rect(this.$el))) {
+          this.load = true;
+      }
+  }
 };
