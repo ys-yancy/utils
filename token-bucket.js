@@ -1,6 +1,6 @@
 /**
- * Created by haipeng on 12/01/2018
- * @author haipeng
+ * Created by Yancy
+ * @author Yancy
  */
 define(function (require, exports, module) {
     /**
